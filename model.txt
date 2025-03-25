@@ -1,0 +1,172 @@
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# 🔹 Load the dataset (Replace with your actual Kaggle dataset path)
+df = pd.read_csv("/kaggle/input/chiller-faults-type/combined_chiller_data.csv")
+
+# 🔹 Drop any duplicate rows
+df = df.drop_duplicates()
+
+# 🔹 Identify numeric columns (excluding 'Fault_Type' and other categorical columns)
+numeric_cols = df.select_dtypes(include=[np.number]).columns
+
+# 🔹 Handle missing values (fill NaN with median)
+df[numeric_cols] = df[numeric_cols].fillna(df[numeric_cols].median())
+
+# 🔹 Standardize numerical features (Z-score normalization)
+df[numeric_cols] = (df[numeric_cols] - df[numeric_cols].mean()) / df[numeric_cols].std()
+
+# 🔹 Apply Sigmoid Normalization
+def sigmoid_normalization(x):
+    return 1 / (1 + np.exp(-x))
+
+df[numeric_cols] = df[numeric_cols].apply(sigmoid_normalization)
+
+# 🔹 Show the first few rows of the corrected dataset
+print(df.head())
+
+# 🔹 Check feature correlations (only for numeric columns)
+plt.figure(figsize=(12, 8))
+sns.heatmap(df[numeric_cols].corr(), cmap="coolwarm", annot=False)
+plt.title("Feature Correlation Heatmap")
+plt.show()
+
+# 🔹 Save the preprocessed dataset
+df.to_csv("preprocessed_data.csv", index=False)
+
+import pandas as pd
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Dropout, Input
+from tensorflow.keras.optimizers import Adam
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+
+# 🔹 Load preprocessed dataset
+df = pd.read_csv("/kaggle/working/preprocessed_data.csv")
+
+# 🔹 Convert Fault_Type (Categorical) to Numeric Labels
+encoder = LabelEncoder()
+df["Fault_Type"] = encoder.fit_transform(df["Fault_Type"])
+
+# 🔹 Separate features & target
+X = df.drop(columns=["Fault_Type"]).values  # Features
+y = df["Fault_Type"].values  # Labels
+
+# 🔹 Check for NaN and Inf values
+if np.isnan(X).sum() > 0 or np.isinf(X).sum() > 0:
+    print("🚨 Data contains NaN or Inf values. Fixing...")
+    X = np.nan_to_num(X)  # Replace NaN with 0
+    X = np.clip(X, -1e6, 1e6)  # Remove extreme values
+
+# 🔹 Standardize Features
+scaler = StandardScaler()
+X = scaler.fit_transform(X)
+
+# 🔹 Reshape X for 1D CNN
+X = X.reshape(X.shape[0], X.shape[1], 1)  # (samples, features, 1)
+
+# 🔹 One-Hot Encode y
+y = tf.keras.utils.to_categorical(y)
+
+# 🔹 Split dataset into 80% Train, 20% Test
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# 🔹 Build the 1D CNN Model
+model = Sequential([
+    Input(shape=(X.shape[1], 1)),  # Explicitly set input shape
+
+    Conv1D(filters=16, kernel_size=3, activation='relu'),
+    MaxPooling1D(pool_size=2),
+
+    Conv1D(filters=32, kernel_size=3, activation='relu'),
+    MaxPooling1D(pool_size=2),
+
+    Conv1D(filters=64, kernel_size=3, activation='relu'),
+    MaxPooling1D(pool_size=2),
+
+    Flatten(),
+    Dense(64, activation='relu'),
+    Dropout(0.5),
+    Dense(y.shape[1], activation='softmax')  # Output layer
+])
+
+# 🔹 Compile with Adam Optimizer (More Stable)
+model.compile(optimizer=Adam(learning_rate=0.001),
+              loss='categorical_crossentropy',
+              metrics=['accuracy'])
+
+# 🔹 Train the model
+history = model.fit(X_train, y_train, epochs=30, batch_size=32, validation_data=(X_test, y_test))
+
+# 🔹 Evaluate performance
+test_loss, test_acc = model.evaluate(X_test, y_test)
+print(f"\n🔹 Test Accuracy: {test_acc:.4f}")
+
+# 🔹 Save the trained model
+model.save("cnn_fault_detection_model.h5")
+
+import pickle
+from sklearn.preprocessing import StandardScaler
+
+# 🔹 Reload dataset to reapply the same scaling
+df = pd.read_csv("preprocessed_data.csv")
+
+# 🔹 Extract features (excluding Fault_Type)
+X = df.drop(columns=["Fault_Type"]).values
+
+# 🔹 Fit StandardScaler on training data
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# 🔹 Save the scaler as a .pkl file
+with open("scaler.pkl", "wb") as f:
+    pickle.dump(scaler, f)
+
+print("✅ Scaler saved as scaler.pkl")
+# Print LabelEncoder mappings (Training Stage)
+import pickle
+from sklearn.preprocessing import LabelEncoder
+
+df = pd.read_csv("preprocessed_data.csv")
+encoder = LabelEncoder()
+df["Fault_Type"] = encoder.fit_transform(df["Fault_Type"])
+
+# Save the encoder mapping
+label_mapping = {i: fault for i, fault in enumerate(encoder.classes_)}
+print("🔹 Label Mapping (Training Stage):", label_mapping)
+
+# Save the LabelEncoder to reuse in the Streamlit app
+with open("label_encoder.pkl", "wb") as f:
+    pickle.dump(encoder, f)
+
+import pickle
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+
+# Load the dataset to reapply the LabelEncoder
+df = pd.read_csv("preprocessed_data.csv")
+
+# 🔹 Save LabelEncoder
+encoder = LabelEncoder()
+df["Fault_Type"] = encoder.fit_transform(df["Fault_Type"])
+with open("label_encoder.pkl", "wb") as f:
+    pickle.dump(encoder, f)
+
+# 🔹 Save Scaler
+scaler = StandardScaler()
+X = df.drop(columns=["Fault_Type"]).values
+scaler.fit(X)
+with open("scaler.pkl", "wb") as f:
+    pickle.dump(scaler, f)
+
+print("✅ label_encoder.pkl and scaler.pkl saved!")
+
+# Save the Model
+import tensorflow as tf
+model = tf.keras.models.load_model("cnn_fault_detection_model.h5")
+model.save("cnn_fault_detection_model.h5")
+
+print("✅ Model saved!")
